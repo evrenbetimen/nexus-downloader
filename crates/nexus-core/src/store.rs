@@ -250,6 +250,6 @@ mod tests {
 
         store.delete(r.id).unwrap();
         assert!(!store.exists(r.id).unwrap());
-        assert!(store.load_segments(r.id).unwrap().is_empty());
+        assert_eq!(store.load_segments(r.id).unwrap(), Vec::new());
     }
 }
