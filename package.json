@@ -1,0 +1,16 @@
+{
+  "name": "nexusdl",
+  "private": true,
+  "packageManager": "pnpm@10.18.0",
+  "scripts": {
+    "dev": "pnpm --filter @nexusdl/desktop tauri dev",
+    "build": "pnpm --filter @nexusdl/desktop tauri build",
+    "web:dev": "pnpm --filter @nexusdl/desktop dev",
+    "web:build": "pnpm --filter @nexusdl/desktop build",
+    "typecheck": "pnpm --filter @nexusdl/desktop typecheck",
+    "check": "pnpm typecheck && pnpm web:build && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
