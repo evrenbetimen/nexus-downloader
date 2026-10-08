@@ -10,6 +10,7 @@ interface AddUrlDialogProps {
 
 export function AddUrlDialog({ initialUrl, onClose }: AddUrlDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const addressRef = useRef<HTMLInputElement>(null);
   const [url, setUrl] = useState(initialUrl);
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -17,6 +18,10 @@ export function AddUrlDialog({ initialUrl, onClose }: AddUrlDialogProps) {
 
   useEffect(() => {
     dialogRef.current?.showModal();
+    // showModal() focuses the first focusable element (the close button), so
+    // move focus to the address field explicitly.
+    addressRef.current?.focus();
+    addressRef.current?.select();
   }, []);
 
   const submit = async (e: FormEvent) => {
@@ -50,7 +55,7 @@ export function AddUrlDialog({ initialUrl, onClose }: AddUrlDialogProps) {
         <label className="flex flex-col gap-1.5 text-xs text-muted">
           Address
           <input
-            autoFocus
+            ref={addressRef}
             required
             type="url"
             value={url}

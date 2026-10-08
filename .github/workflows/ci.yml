@@ -4,16 +4,18 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
 
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
 
 jobs:
-  check:
+  rust:
+    name: Rust (fmt, clippy, tests)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Tauri system dependencies
         run: |
@@ -27,18 +29,43 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The Tauri crate embeds the built frontend.
+      - run: pnpm web:build
 
-      - name: Frontend typecheck and build
-        run: pnpm web:build
-
-      - name: Rust format
+      - name: Format
         run: cargo fmt --all --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests
         run: cargo test --workspace
+
+  web:
+    name: Frontend (typecheck, unit, end-to-end)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Unit tests
+        run: pnpm --filter @nexusdl/desktop test:coverage
+      - name: Install Playwright Chromium
+        run: pnpm --filter @nexusdl/desktop exec playwright install --with-deps chromium
+      - name: End-to-end tests
+        run: pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: apps/desktop/test-results/

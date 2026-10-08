@@ -2,23 +2,8 @@ import { Gauge } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { formatSpeed } from "../lib/format";
+import { STEPS, limitToStep as toStep, stepToLimit as toLimit } from "../lib/speedScale";
 import { useDownloads } from "../store/downloads";
-
-const STEPS = 100; // the last step means "unlimited"
-const MIN = 64 * 1024;
-const MAX = 100 * 1024 * 1024;
-
-/** Log scale so both 100 KB/s and 50 MB/s are easy to hit. */
-function toLimit(step: number): number | null {
-  if (step >= STEPS) return null;
-  return Math.round(MIN * (MAX / MIN) ** (step / (STEPS - 1)));
-}
-
-function toStep(limit: number | null): number {
-  if (limit == null) return STEPS;
-  const ratio = Math.log(Math.min(Math.max(limit, MIN), MAX) / MIN) / Math.log(MAX / MIN);
-  return Math.round(ratio * (STEPS - 1));
-}
 
 export function SpeedLimiter() {
   const speedLimit = useDownloads((s) => s.speedLimit);
