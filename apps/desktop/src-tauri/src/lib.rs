@@ -21,9 +21,12 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
+            // XDG may not name a downloads folder (e.g. minimal Linux setups);
+            // fall back to ~/Downloads rather than a hidden app folder.
             let download_dir = app
                 .path()
                 .download_dir()
+                .or_else(|_| app.path().home_dir().map(|home| home.join("Downloads")))
                 .unwrap_or_else(|_| data_dir.join("downloads"));
             let config = EngineConfig {
                 database_path: Some(data_dir.join("nexusdl.sqlite3")),

@@ -64,5 +64,17 @@ Prerequisites: Rust (stable), Node 22+, pnpm 10, and the
 pnpm install
 pnpm dev          # desktop app with hot reload
 pnpm web:dev      # UI only, in the browser, simulated engine
-pnpm check        # typecheck, web build, clippy (deny warnings), tests
+pnpm check        # typecheck, UI unit tests, web build, clippy, Rust tests
+pnpm test:e2e     # UI end-to-end tests in Chromium
 ```
+
+See [docs/QA.md](docs/QA.md) for the full QA/QC suite and the manual release
+checklist.
+
+## Release
+
+Run the **Release** workflow (Actions → Release → Run workflow) with a tag
+matching the app version, e.g. `v0.1.0`, or push that tag. It re-runs the full
+CI suite, then builds Windows (`.msi`, `.exe`), macOS (universal `.dmg`) and
+Linux (`.deb`, `.rpm`, `.AppImage`) installers and attaches them to a GitHub
+release. Installers are currently unsigned.

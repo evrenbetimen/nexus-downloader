@@ -50,6 +50,9 @@ struct Inner {
     /// Downloads that were running when the previous session ended.
     interrupted: Mutex<Vec<DownloadId>>,
     shutting_down: AtomicBool,
+    /// Serialises file-name resolution so parallel downloads of the same
+    /// file never pick the same path.
+    names: Mutex<()>,
 }
 
 #[derive(Debug)]
@@ -61,8 +64,10 @@ struct Meta {
     resumable: bool,
     status: DownloadStatus,
     error: Option<String>,
-    /// The file name is final (user-chosen, or already resolved by a probe).
-    name_fixed: bool,
+    /// The user chose the name, so the server's suggestion is ignored.
+    user_named: bool,
+    /// The name has been made unique on disk and is now final.
+    name_resolved: bool,
 }
 
 #[derive(Debug)]
@@ -231,7 +236,8 @@ impl DownloadManager {
                     resumable: record.resumable,
                     status,
                     error: record.error,
-                    name_fixed: true,
+                    user_named: true,
+                    name_resolved: true,
                 }),
                 table: Mutex::new(table),
                 streamed: AtomicU64::new(0),
@@ -254,6 +260,7 @@ impl DownloadManager {
                 runtime: Handle::current(),
                 interrupted: Mutex::new(interrupted),
                 shutting_down: AtomicBool::new(false),
+                names: Mutex::new(()),
             }),
         })
     }
@@ -316,7 +323,8 @@ impl DownloadManager {
                 resumable: false,
                 status: DownloadStatus::Queued,
                 error: None,
-                name_fixed: user_named.is_some(),
+                user_named: user_named.is_some(),
+                name_resolved: false,
             }),
             table: Mutex::new(None),
             streamed: AtomicU64::new(0),
@@ -446,6 +454,26 @@ impl Inner {
         *task = Some(Running { cancel, handle });
     }
 
+    fn resolve_file_name(&self, entry: &Entry, directory: &Path, name: &str) {
+        let _names = self.names.lock().expect("names poisoned");
+        let others: Vec<_> = self
+            .read()
+            .values()
+            .filter(|e| e.id != entry.id)
+            .cloned()
+            .collect();
+        let claimed = |path: &Path| {
+            others.iter().any(|e| {
+                let meta = e.meta();
+                meta.name_resolved && meta.directory.join(&meta.file_name) == path
+            })
+        };
+        let unique = unique_file_name(directory, name, claimed);
+        let mut meta = entry.meta();
+        meta.file_name = unique;
+        meta.name_resolved = true;
+    }
+
     async fn stop(&self, entry: &Entry) {
         let running = entry.task.lock().expect("task poisoned").take();
         if let Some(running) = running {
@@ -541,20 +569,23 @@ async fn drive(inner: &Arc<Inner>, entry: &Arc<Entry>) -> Result<()> {
         .await
         .unwrap_or(false);
     if !has_map || !has_part {
-        let probe = http::probe(&inner.client, &entry.url, &headers).await?;
+        let probe = probe_with_retry(inner, &entry.url, &headers).await?;
         debug!(id = %entry.id, ?probe, "probed");
-        let mut meta = entry.meta();
-        meta.final_url = Some(probe.final_url);
-        meta.total_bytes = probe.total_bytes;
-        meta.resumable = probe.resumable;
-        if !meta.name_fixed {
-            if let Some(name) = probe.file_name {
+        let resolve = {
+            let mut meta = entry.meta();
+            meta.final_url = Some(probe.final_url);
+            meta.total_bytes = probe.total_bytes;
+            meta.resumable = probe.resumable;
+            if !meta.user_named
+                && let Some(name) = probe.file_name
+            {
                 meta.file_name = name;
             }
-            meta.file_name = unique_file_name(&meta.directory, &meta.file_name);
-            meta.name_fixed = true;
+            (!meta.name_resolved).then(|| (meta.directory.clone(), meta.file_name.clone()))
+        };
+        if let Some((directory, name)) = resolve {
+            inner.resolve_file_name(entry, &directory, &name);
         }
-        drop(meta);
         *entry.table() = None;
     }
 
@@ -591,6 +622,29 @@ async fn drive(inner: &Arc<Inner>, entry: &Arc<Entry>) -> Result<()> {
     Ok(())
 }
 
+async fn probe_with_retry(
+    inner: &Inner,
+    url: &str,
+    headers: &HeaderMap,
+) -> Result<http::ProbeResult> {
+    let mut attempt = 0;
+    loop {
+        match http::probe(&inner.client, url, headers).await {
+            Err(e) if e.is_transient() && attempt < inner.config.max_retries => {
+                attempt += 1;
+                let delay = backoff(attempt);
+                debug!(url, attempt, "probe failed, retrying in {delay:?}: {e}");
+                tokio::time::sleep(delay).await;
+            }
+            result => return result,
+        }
+    }
+}
+
+fn backoff(attempt: u32) -> Duration {
+    Duration::from_millis(250 << attempt.min(6)).min(Duration::from_secs(10))
+}
+
 /// Reserves the full file size up front (fallocate on Linux, `F_PREALLOCATE`
 /// on macOS, `SetFileInformationByHandle` on Windows) so the file is laid out
 /// contiguously and a full disk fails now rather than at 97 %.
@@ -611,9 +665,13 @@ async fn preallocate(path: &Path, len: u64) -> Result<()> {
     .await?
 }
 
-/// `name.ext` → `name (1).ext` when the file (or its partial download) exists.
-fn unique_file_name(dir: &Path, name: &str) -> String {
-    let taken = |n: &str| dir.join(n).exists() || dir.join(format!("{n}{PART_SUFFIX}")).exists();
+/// `name.ext` → `name (1).ext` when the file (or its partial download) exists
+/// or another download already claimed that path.
+fn unique_file_name(dir: &Path, name: &str, claimed: impl Fn(&Path) -> bool) -> String {
+    let taken = |n: &str| {
+        let path = dir.join(n);
+        claimed(&path) || path.exists() || dir.join(format!("{n}{PART_SUFFIX}")).exists()
+    };
     if !taken(name) {
         return name.to_owned();
     }
@@ -740,10 +798,9 @@ async fn fetch_with_retry(ctx: &WorkerCtx, file: &mut tokio::fs::File, idx: usiz
                     attempt = 0;
                 }
                 attempt += 1;
-                let backoff =
-                    Duration::from_millis(250 << attempt.min(6)).min(Duration::from_secs(10));
-                debug!(id = %ctx.entry.id, idx, attempt, "segment error, retrying in {backoff:?}: {e}");
-                tokio::time::sleep(backoff).await;
+                let delay = backoff(attempt);
+                debug!(id = %ctx.entry.id, idx, attempt, "segment error, retrying in {delay:?}: {e}");
+                tokio::time::sleep(delay).await;
             }
             Err(e) => return Err(e),
         }
@@ -869,11 +926,22 @@ mod tests {
     #[test]
     fn picks_unique_names() {
         let dir = tempfile::tempdir().unwrap();
-        assert_eq!(unique_file_name(dir.path(), "a.zip"), "a.zip");
+        assert_eq!(unique_file_name(dir.path(), "a.zip", |_| false), "a.zip");
         std::fs::write(dir.path().join("a.zip"), b"").unwrap();
         std::fs::write(dir.path().join("a (1).zip.nxpart"), b"").unwrap();
-        assert_eq!(unique_file_name(dir.path(), "a.zip"), "a (2).zip");
+        assert_eq!(
+            unique_file_name(dir.path(), "a.zip", |_| false),
+            "a (2).zip"
+        );
+        let claimed = dir.path().join("a (2).zip");
+        assert_eq!(
+            unique_file_name(dir.path(), "a.zip", |p| p == claimed),
+            "a (3).zip"
+        );
         std::fs::write(dir.path().join("README"), b"").unwrap();
-        assert_eq!(unique_file_name(dir.path(), "README"), "README (1)");
+        assert_eq!(
+            unique_file_name(dir.path(), "README", |_| false),
+            "README (1)"
+        );
     }
 }

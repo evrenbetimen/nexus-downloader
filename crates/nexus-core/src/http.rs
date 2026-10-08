@@ -76,10 +76,14 @@ pub struct ProbeResult {
 /// Asks for the first byte only: a `206` with `Content-Range` proves the server
 /// supports ranges and tells us the full size in a single round trip.
 pub async fn probe(client: &Client, url: &str, headers: &HeaderMap) -> Result<ProbeResult> {
-    let resp = get(client, url, headers)
+    let mut resp = get(client, url, headers)
         .header(header::RANGE, "bytes=0-0")
         .send()
         .await?;
+    if resp.status() == StatusCode::RANGE_NOT_SATISFIABLE {
+        // Empty files have no byte 0; ask again for the whole (empty) body.
+        resp = get(client, url, headers).send().await?;
+    }
     let status = resp.status();
     if !status.is_success() {
         return Err(NexusError::BadStatus(status.as_u16()));
