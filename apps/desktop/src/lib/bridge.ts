@@ -6,6 +6,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
+  CapturedDownload,
   DownloadId,
   DownloadRequest,
   DownloadSnapshot,
@@ -18,6 +19,7 @@ export const EVENTS = {
   progress: "download://progress",
   lifecycle: "download://lifecycle",
   resync: "download://resync",
+  captured: "download://captured",
 } as const;
 
 export interface Engine {
@@ -33,6 +35,10 @@ export interface Engine {
   onProgress(handler: (frame: ProgressFrame) => void): Promise<UnlistenFn>;
   onLifecycle(handler: (event: ManagerEvent) => void): Promise<UnlistenFn>;
   onResync(handler: () => void): Promise<UnlistenFn>;
+  /** Downloads captured by the browser extension and not yet confirmed. */
+  takeCaptured(): Promise<CapturedDownload[]>;
+  /** Fires when new captures are waiting; call `takeCaptured` to get them. */
+  onCaptured(handler: () => void): Promise<UnlistenFn>;
 }
 
 const tauriEngine: Engine = {
@@ -47,6 +53,8 @@ const tauriEngine: Engine = {
   onProgress: (handler) => listen<ProgressFrame>(EVENTS.progress, (e) => handler(e.payload)),
   onLifecycle: (handler) => listen<ManagerEvent>(EVENTS.lifecycle, (e) => handler(e.payload)),
   onResync: (handler) => listen(EVENTS.resync, () => handler()),
+  takeCaptured: () => invoke("take_captured_downloads"),
+  onCaptured: (handler) => listen(EVENTS.captured, () => handler()),
 };
 
 export const engine: Engine = isTauri() ? tauriEngine : createMockEngine();

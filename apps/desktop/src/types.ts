@@ -38,6 +38,16 @@ export interface DownloadRequest {
   context?: RequestContext;
 }
 
+/** A download the browser extension handed over (crates/nexus-bridge/src/protocol.rs). */
+export interface CapturedDownload {
+  url: string;
+  fileName?: string | null;
+  fileSize?: number | null;
+  referrer?: string | null;
+  cookies?: string | null;
+  userAgent?: string | null;
+}
+
 export interface DownloadSnapshot {
   id: DownloadId;
   url: string;

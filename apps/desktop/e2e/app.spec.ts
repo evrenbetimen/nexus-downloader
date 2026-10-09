@@ -123,6 +123,42 @@ test("dropping a link opens the add dialog prefilled", async ({ page }) => {
   );
 });
 
+test("browser captures open one confirmation each, keeping the session", async ({ page }) => {
+  await page.evaluate(() => {
+    const capture = (window as unknown as { __nexusdlCapture(d: object): void }).__nexusdlCapture;
+    capture({
+      url: "https://cdn.example.com/dl?id=42",
+      fileName: "season-finale.mkv",
+      fileSize: 1_610_612_736,
+      referrer: "https://videos.example.com/watch/42",
+      cookies: "session=abc",
+      userAgent: "TestBrowser/1.0",
+    });
+    capture({ url: "https://mirror.example.org/tools.zip" });
+  });
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading")).toHaveText("Download from browser");
+  await expect(dialog).toContainText("Captured from videos.example.com · 1.50 GB · signed-in session");
+  await expect(dialog.getByLabel("Address")).toHaveValue("https://cdn.example.com/dl?id=42");
+  await expect(dialog.getByLabel("Save as (optional)")).toHaveValue("season-finale.mkv");
+  await dialog.getByRole("button", { name: "Start download" }).click();
+  await expect(rows(page).first()).toContainText("season-finale.mkv");
+  const request = await page.evaluate(() => (window as unknown as { __nexusdlLastRequest: unknown }).__nexusdlLastRequest);
+  expect(request).toEqual({
+    url: "https://cdn.example.com/dl?id=42",
+    fileName: "season-finale.mkv",
+    context: { cookies: "session=abc", referrer: "https://videos.example.com/watch/42", userAgent: "TestBrowser/1.0" },
+  });
+
+  // The second capture follows; cancelling it adds nothing.
+  await expect(dialog.getByLabel("Address")).toHaveValue("https://mirror.example.org/tools.zip");
+  await expect(dialog).toContainText("Captured from your browser");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("button", { name: /All Downloads/ })).toContainText("10,005");
+});
+
 test("speed limiter caps and uncaps total speed", async ({ page }) => {
   const slider = page.getByRole("slider", { name: "Speed limit" });
   await expect(slider).toHaveValue("100");

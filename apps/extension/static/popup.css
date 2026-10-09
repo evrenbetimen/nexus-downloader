@@ -1,0 +1,40 @@
+:root {
+  color-scheme: dark;
+  --canvas: #0b0d12;
+  --raised: #141821;
+  --line: #262c38;
+  --ink: #e7eaf0;
+  --muted: #8a93a6;
+  --accent: #5b8cff;
+  --good: #3ccf91;
+  --bad: #e5484d;
+  --warn: #f2b84b;
+}
+body {
+  margin: 0;
+  width: 300px;
+  padding: 14px;
+  background: var(--canvas);
+  color: var(--ink);
+  font: 13px/1.4 system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+header { display: flex; align-items: center; gap: 8px; }
+h1 { margin: 0; font-size: 15px; }
+.status { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--raised); border-left: 3px solid var(--muted); }
+.status[data-state="connected"] { border-color: var(--good); }
+.status[data-state="installed"] { border-color: var(--warn); }
+.status[data-state="missing"] { border-color: var(--bad); }
+.toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+details { display: flex; flex-direction: column; gap: 8px; }
+summary { cursor: pointer; color: var(--muted); }
+details label { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; color: var(--muted); font-size: 12px; }
+textarea, input[type="number"] {
+  background: var(--raised); color: var(--ink); border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 8px; font: 12px ui-monospace, monospace; resize: vertical;
+}
+button { margin-top: 8px; padding: 6px 14px; border: 0; border-radius: 6px; background: var(--accent); color: var(--canvas); font-weight: 600; cursor: pointer; }
+.saved { margin-left: 8px; color: var(--good); font-size: 12px; }
+.hint { margin: 0; color: var(--muted); font-size: 12px; }
