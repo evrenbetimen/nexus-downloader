@@ -97,6 +97,12 @@ const test = base.extend<Fixtures>({
         .filter(Boolean)
         .map((line) => JSON.parse(line) as HostLog);
     await use({ context, worker, hostLog });
+    // macOS Chromium won't close while a download is still running.
+    await worker
+      .evaluate(async () => {
+        for (const { id } of await chrome.downloads.search({ state: "in_progress" })) await chrome.downloads.cancel(id);
+      })
+      .catch(() => {});
     await context.close();
     await rm(root, { recursive: true, force: true });
   },

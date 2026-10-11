@@ -336,8 +336,9 @@ mod tests {
     #[test]
     fn spawned_apps_do_not_inherit_the_browser_pipe() {
         // `true` exits at once; spawning must succeed without touching our stdio.
+        // It lives in /usr/bin on both macOS and Linux (macOS has no /bin/true).
         #[cfg(unix)]
-        spawn_detached(Path::new("/bin/true")).unwrap();
+        spawn_detached(Path::new("/usr/bin/true")).unwrap();
         assert!(spawn_detached(Path::new("/definitely/not/here")).is_err());
     }
 }
