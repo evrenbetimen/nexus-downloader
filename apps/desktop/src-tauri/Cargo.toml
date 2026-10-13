@@ -16,6 +16,8 @@ tauri-build.workspace = true
 
 [dependencies]
 nexus-core.workspace = true
+nexus-bridge.workspace = true
+dirs = "7"
 tauri.workspace = true
 tokio.workspace = true
 serde.workspace = true

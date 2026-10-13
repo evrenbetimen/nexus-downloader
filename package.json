@@ -7,10 +7,11 @@
     "build": "pnpm --filter @nexusdl/desktop tauri build",
     "web:dev": "pnpm --filter @nexusdl/desktop dev",
     "web:build": "pnpm --filter @nexusdl/desktop build",
-    "typecheck": "pnpm --filter @nexusdl/desktop typecheck",
-    "check": "pnpm typecheck && pnpm test:web && pnpm web:build && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace",
-    "test:web": "pnpm --filter @nexusdl/desktop test",
-    "test:e2e": "pnpm --filter @nexusdl/desktop test:e2e"
+    "typecheck": "pnpm -r typecheck",
+    "check": "pnpm typecheck && pnpm test:web && pnpm web:build && pnpm ext:build && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace",
+    "test:web": "pnpm -r test",
+    "test:e2e": "pnpm -r test:e2e",
+    "ext:build": "pnpm --filter @nexusdl/extension build"
   },
   "engines": {
     "node": ">=22"

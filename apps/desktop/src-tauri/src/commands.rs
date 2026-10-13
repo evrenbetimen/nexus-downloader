@@ -3,9 +3,12 @@
 // Tauri injects `State` by value; commands can't take it by reference.
 #![allow(clippy::needless_pass_by_value)]
 
+use nexus_bridge::protocol::CapturedDownload;
 use nexus_core::{DownloadId, DownloadManager, DownloadRequest, DownloadSnapshot, NexusError};
 use serde::{Serialize, Serializer};
 use tauri::State;
+
+use crate::browser::Inbox;
 
 /// Errors cross the bridge as plain messages; the UI shows them verbatim.
 #[derive(Debug, thiserror::Error)]
@@ -64,4 +67,10 @@ pub fn set_speed_limit(manager: State<'_, DownloadManager>, bytes_per_sec: Optio
 #[tauri::command]
 pub fn get_speed_limit(manager: State<'_, DownloadManager>) -> Option<u64> {
     manager.speed_limit()
+}
+
+/// Drains downloads the browser extension handed over (see `browser.rs`).
+#[tauri::command]
+pub fn take_captured_downloads(inbox: State<'_, Inbox>) -> Vec<CapturedDownload> {
+    inbox.take()
 }

@@ -4,6 +4,8 @@
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
+  CapturedDownload,
+  DownloadRequest,
   DownloadSnapshot,
   FileCategory,
   ManagerEvent,
@@ -38,8 +40,16 @@ export function createMockEngine(): Engine {
   const sims = new Map<string, Sim>();
   const progressHandlers = new Set<(f: ProgressFrame) => void>();
   const lifecycleHandlers = new Set<(e: ManagerEvent) => void>();
+  const capturedHandlers = new Set<() => void>();
+  let captured: CapturedDownload[] = [];
   let limit: number | null = null;
   let seq = 0;
+
+  // Lets end-to-end tests play the browser extension.
+  (window as { __nexusdlCapture?: (d: CapturedDownload) => void }).__nexusdlCapture = (d) => {
+    captured.push(d);
+    capturedHandlers.forEach((h) => h());
+  };
 
   const make = (name: string, total: number, status: DownloadSnapshot["status"], ago: number) => {
     seq += 1;
@@ -141,6 +151,7 @@ export function createMockEngine(): Engine {
     native: false,
     list: () => Promise.resolve([...sims.values()].map((s) => ({ ...s.snapshot }))),
     add: (request) => {
+      (window as { __nexusdlLastRequest?: DownloadRequest }).__nexusdlLastRequest = request;
       const name = request.fileName || decodeURIComponent(request.url.split("/").pop() || "download");
       const snapshot = make(name, 50e6 + Math.random() * 900e6, "downloading", 0);
       emit({ kind: "added", download: { ...snapshot } });
@@ -161,5 +172,11 @@ export function createMockEngine(): Engine {
     onProgress: (h) => sub(progressHandlers, h),
     onLifecycle: (h) => sub(lifecycleHandlers, h),
     onResync: () => Promise.resolve(() => {}),
+    takeCaptured: () => {
+      const taken = captured;
+      captured = [];
+      return Promise.resolve(taken);
+    },
+    onCaptured: (h) => sub(capturedHandlers, h),
   };
 }

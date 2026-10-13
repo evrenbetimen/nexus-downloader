@@ -9,6 +9,8 @@ A modern, IDM-class download manager. Rust core engine, Tauri v2 shell, React 19
 ├── Cargo.toml                 # Rust workspace (shared deps, lints, release profile)
 ├── package.json               # pnpm workspace scripts
 ├── crates/
+│   ├── nexus-bridge/          # Browser integration: native messaging host, its
+│   │                          # registration, loopback channel to the app
 │   └── nexus-core/            # Download engine (no UI dependencies)
 │       ├── src/manager.rs     # DownloadManager: lifecycle, workers, checkpoints
 │       ├── src/segment.rs     # Byte map + work-stealing segment splitter
@@ -17,9 +19,10 @@ A modern, IDM-class download manager. Rust core engine, Tauri v2 shell, React 19
 │       ├── src/http.rs        # Pooled client, session-cloned headers, probe
 │       └── tests/engine.rs    # End-to-end tests against a local range server
 └── apps/
-    └── desktop/               # Tauri v2 app
-        ├── src-tauri/         # Rust shell: commands + 60 fps event bridge
-        └── src/               # React 19 + TypeScript + Tailwind v4 UI
+    ├── desktop/               # Tauri v2 app
+    │   ├── src-tauri/         # Rust shell: commands + 60 fps event bridge
+    │   └── src/               # React 19 + TypeScript + Tailwind v4 UI
+    └── extension/             # Browser extension (Chrome, Edge, Brave, Firefox)
 ```
 
 ## Engine
@@ -44,6 +47,30 @@ A modern, IDM-class download manager. Rust core engine, Tauri v2 shell, React 19
 - **Throttling.** A global token bucket caps total bandwidth; changing the
   limit applies to running connections from their next chunk.
 
+## Browser capture
+
+Like IDM, NexusDL takes over downloads you start in the browser and asks for
+confirmation in its own window, keeping the browser session (cookies,
+referrer, user agent) so signed-in and hotlink-protected links work.
+
+```
+extension ──native messaging──▶ nexusdl (host mode) ──127.0.0.1 + token──▶ running app
+```
+
+- The browser starts the NexusDL executable itself as the native messaging
+  host. That short-lived process relays to the running app over a loopback
+  socket whose port and token live in a file only the user can read, and
+  starts the app first when it isn't running.
+- The app registers the host with every Chromium browser and Firefox it finds
+  (per user, no admin rights) on each launch, so open the app once after
+  installing it.
+- The extension captures listed file types (by name, URL or MIME type),
+  skips private windows and `blob:`/`data:` downloads, and gives a download
+  back to the browser if the app is missing or refuses it. Right-click a link
+  for "Download with NexusDL".
+
+See [docs/EXTENSION.md](docs/EXTENSION.md) to install it.
+
 ## UI
 
 - Zustand store split into rarely-changing download records and a small
@@ -64,8 +91,9 @@ Prerequisites: Rust (stable), Node 22+, pnpm 10, and the
 pnpm install
 pnpm dev          # desktop app with hot reload
 pnpm web:dev      # UI only, in the browser, simulated engine
-pnpm check        # typecheck, UI unit tests, web build, clippy, Rust tests
-pnpm test:e2e     # UI end-to-end tests in Chromium
+pnpm check        # typecheck, unit tests, web + extension build, clippy, Rust tests
+pnpm test:e2e     # UI and extension end-to-end tests in Chromium
+pnpm ext:build    # extension into apps/extension/dist/{chromium,firefox}
 ```
 
 See [docs/QA.md](docs/QA.md) for the full QA/QC suite and the manual release
@@ -76,5 +104,6 @@ checklist.
 Run the **Release** workflow (Actions → Release → Run workflow) with a tag
 matching the app version, e.g. `v0.1.0`, or push that tag. It re-runs the full
 CI suite, then builds Windows (`.msi`, `.exe`), macOS (universal `.dmg`) and
-Linux (`.deb`, `.rpm`, `.AppImage`) installers and attaches them to a GitHub
-release. Installers are currently unsigned.
+Linux (`.deb`, `.rpm`, `.AppImage`) installers and the browser extension
+(`NexusDL-extension-chromium-*.zip`, `NexusDL-extension-firefox-*.zip`) and
+attaches them to a GitHub release. Installers are currently unsigned.

@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.2.0 — browser capture
+
+### Browser extension (Chrome, Edge, Brave, Vivaldi, Firefox)
+- Downloads started in the browser open in NexusDL, like IDM: the browser's
+  copy is cancelled and NexusDL asks for confirmation in its own window.
+- The browser session goes with the download: cookies, referrer and user
+  agent, so signed-in and hotlink-protected links work.
+- Captures common archive, disk image, installer, video, audio and PDF types,
+  matched by file name, URL or MIME type. The list and a minimum size can be
+  changed in the toolbar popup, and capture can be switched off.
+- Private windows and in-browser (`blob:`, `data:`) downloads stay in the
+  browser.
+- If NexusDL is missing or refuses a download, the browser downloads it
+  itself and the toolbar button shows why.
+- "Download with NexusDL" in the link, video and audio context menu.
+- The popup shows whether the app is installed and running.
+
+### App
+- The app registers itself with installed browsers on every launch (per
+  user, no admin rights needed).
+- A captured download starts the app if it isn't running and brings its
+  window to the front.
+
+### Known limitations
+- The extension is not in the Chrome Web Store or on addons.mozilla.org yet.
+  Chromium browsers load it unpacked (developer mode); Firefox only loads
+  the unsigned build temporarily, until it restarts.
+- POST-based downloads are re-requested with GET and may fail.
+
 ## v0.1.0 — first preview
 
 First public build of NexusDL. It is a preview: the browser extension, the

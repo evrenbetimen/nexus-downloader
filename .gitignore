@@ -20,4 +20,6 @@ apps/desktop/src-tauri/gen/schemas/
 # Test output
 apps/desktop/test-results/
 apps/desktop/playwright-report/
+apps/extension/test-results/
+apps/extension/playwright-report/
 coverage/

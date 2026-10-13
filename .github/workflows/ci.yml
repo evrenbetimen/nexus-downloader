@@ -63,9 +63,50 @@ jobs:
       - name: Install Playwright Chromium
         run: pnpm --filter @nexusdl/desktop exec playwright install --with-deps chromium
       - name: End-to-end tests
-        run: pnpm test:e2e
+        run: pnpm --filter @nexusdl/desktop test:e2e
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: playwright-traces
           path: apps/desktop/test-results/
+
+  extension:
+    name: Extension (typecheck, unit, Chromium)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm --filter @nexusdl/extension typecheck
+      - name: Unit tests
+        run: pnpm --filter @nexusdl/extension test
+      - name: Install Playwright Chromium
+        run: pnpm --filter @nexusdl/extension exec playwright install --with-deps chromium
+      - name: Browser tests
+        run: pnpm --filter @nexusdl/extension test:e2e
+
+  bridge:
+    # The browser bridge has Windows- and macOS-only code (registry, process
+    # flags, paths) that the Linux jobs never compile.
+    name: Browser bridge (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Clippy
+        run: cargo clippy -p nexus-bridge --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test -p nexus-bridge
